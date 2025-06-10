@@ -55,6 +55,18 @@ The output CSV file contains the following columns:
 - `Dx_Debyes`, `Dy_Debyes`, `Dz_Debyes`: Transition dipole moments in Debye units
 - `TotalD_Debyes`: Total transition dipole moment in Debye units
 
+### Example Output
+
+Here's an example of the output data (truncated for clarity):
+
+| Phi | Psi | end_state | Energy | Config | Coeff | Weight | Dipole Moment | Dx_Debyes | Dy_Debyes | Dz_Debyes | TotalD_Debyes |
+|-----|-----|-----------|---------|---------|--------|---------|---------------|------------|------------|------------|---------------|
+| 240 | 90 | 1 | -453.959 | 22222200 | 0.963 | 0.927 | 1.429 | - | - | - | - |
+| 240 | 90 | 2 | -453.743 | 222u220d | 0.947 | 0.898 | 2.516 | -0.065 | -0.068 | 0.173 | 0.197 |
+| 240 | 90 | 3 | -453.741 | 22u222d0 | -0.894 | 0.800 | 3.013 | -0.244 | -0.208 | -0.036 | 0.323 |
+| 240 | 90 | 4 | -453.645 | 22222ud0 | -0.830 | 0.689 | 3.273 | -4.238 | 1.524 | -0.824 | 4.578 |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
 ## Example
 
 For a log file named `90_180.log` containing:
