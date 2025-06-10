@@ -31,11 +31,6 @@ ENV/
 *.swp
 *.swo
 
-# Project specific
-log_files/
-*.log
-transition_analysis_results.csv
-
 # Distribution / packaging
 *.egg-info/
 

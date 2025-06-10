@@ -20,7 +20,7 @@ This Python tool analyzes RASSCF (Restricted Active Space Self-Consistent Field)
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/rasscf-analysis.git
+git clone https://github.com/casualPhysics/orca-logfile-transition-parser.git
 cd rasscf-analysis
 ```
 
