@@ -1,0 +1,313 @@
+import os
+import re
+from typing import Dict, List, Tuple, Optional
+import pandas as pd
+import numpy as np
+
+
+def extract_roots(log_content: str) -> Dict[int, Dict]:
+    """
+    Extract root information (energy, weights, configurations) from RASSCF log file.
+    Only processes the section between wave function printout markers.
+    
+    Args:
+        log_content (str): Content of the RASSCF log file
+        
+    Returns:
+        Dict[int, Dict]: Dictionary containing information for each root
+    """
+    # Define the section markers
+    start_marker = "Wave function printout:"
+    end_marker = "Natural orbitals and occupation numbers for root"
+    
+    # Extract the relevant section
+    section_pattern = f"{start_marker}.*?{end_marker}"
+    section_match = re.search(section_pattern, log_content, re.DOTALL)
+    if not section_match:
+        return {}
+    
+    section_content = section_match.group(0)
+    root_pattern = re.compile(r'printout of CI-coefficients larger than\s+0\.05 for root\s+(\d+)')
+    energy_pattern = re.compile(r'energy=\s+(-?\d+\.\d+)')
+    weight_pattern = re.compile(r'^\s+\d+\s+([0-9ud]+)\s+(-?\d+\.\d+)\s+(-?\d+\.\d+)')
+
+    roots = {}
+    current_root = None
+    
+    # Split content into lines and process
+    lines = section_content.split('\n')
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        
+        # Check for root marker
+        root_match = root_pattern.search(line)
+        if root_match:
+            current_root = int(root_match.group(1))
+            roots[current_root] = {
+                'energy': None,
+                'configurations': []  # List to store all configurations
+            }
+            # Look for energy in next line
+            if i + 1 < len(lines):
+                energy_match = energy_pattern.search(lines[i + 1])
+                if energy_match:
+                    roots[current_root]['energy'] = float(energy_match.group(1))
+                    i += 1  # Skip the energy line
+        else:
+            # Check for weights
+            weight_match = weight_pattern.search(line)
+            if weight_match and current_root is not None:
+                config = weight_match.group(1)
+                coeff = float(weight_match.group(2))
+                weight = float(weight_match.group(3))
+                roots[current_root]['configurations'].append({
+                    'config': config,
+                    'coeff': coeff,
+                    'weight': weight
+                })
+        
+        i += 1
+    return roots
+
+
+def extract_dipole_moments(log_content: str) -> Dict[int, float]:
+    """
+    Extract dipole moments for each root from RASSCF log file.
+    
+    Args:
+        log_content (str): Content of the RASSCF log file
+        
+    Returns:
+        Dict[int, float]: Dictionary mapping root numbers to their dipole moments
+    """
+    debye_pattern = re.compile(r'Expectation values of various properties for root number:\s+(\d+)')
+    dipole_moments = {}
+    current_root = None
+    
+    for line in log_content.split('\n'):
+        debye_match = debye_pattern.search(line)
+        if debye_match:
+            current_root = int(debye_match.group(1))
+        elif current_root is not None:
+            debye_match = re.search(r'Total=\s*([-+]?\d+\.\d+E[-+]\d+)', line)
+            if debye_match:
+                dipole_moments[current_root] = float(debye_match.group(1))
+    
+    return dipole_moments
+
+
+def extract_geometry(filename: str) -> Tuple[Optional[int], Optional[int]]:
+    """
+    Extract phi and psi angles from filename.
+    
+    Args:
+        filename (str): Name of the file containing geometry information
+        
+    Returns:
+        Tuple[Optional[int], Optional[int]]: Phi and psi angles if found, None otherwise
+    """
+    match = re.search(r'(\d+)_(\d+)', filename)
+    if match:
+        return int(match.group(1)), int(match.group(2))
+    return None, None
+
+
+def get_section_between_start_and_end(string: str, start_string: str, end_string: str) -> str:
+    """
+    Extract text between two markers in a string.
+    
+    Args:
+        string (str): Input string to search in
+        start_string (str): Starting marker
+        end_string (str): Ending marker
+        
+    Returns:
+        str: Extracted text between markers
+    """
+    block_match = re.search(f"{start_string}(.*?){end_string}", string, re.DOTALL | re.MULTILINE)
+    return block_match.group(1) if block_match else ""
+
+
+def get_dataframe_from_transition_string(
+    block: str,
+    block_headings: List[str],
+    data_pattern: str
+) -> pd.DataFrame:
+    """
+    Convert transition string data to DataFrame.
+    
+    Args:
+        block (str): String containing transition data
+        block_headings (List[str]): Column names for the DataFrame
+        data_pattern (str): Regex pattern to match data
+        
+    Returns:
+        pd.DataFrame: DataFrame containing transition data
+    """
+    matches = re.findall(data_pattern, block, re.MULTILINE)
+    results = [dict(zip(block_headings, [float(i) for i in match])) for match in matches]
+    return pd.DataFrame(results)
+
+
+def get_transition_data(
+    log_content: str,
+    start_marker: str,
+    end_marker: str,
+    block_headings: List[str],
+    data_pattern: str = r"^\s*(\d+)\s+(\d+)\s+([-+]?\d+\.\d+E[-+]?\d+)\s+([-+]?\d+\.\d+E[-+]?\d+)\s+([-+]?\d+\.\d+E[-+]?\d+)\s+([-+]?\d+\.\d+E[-+]?\d+)"
+) -> pd.DataFrame:
+    """
+    Extract transition data from log content.
+    
+    Args:
+        log_content (str): Content of the log file
+        start_marker (str): Starting marker for transition data
+        end_marker (str): Ending marker for transition data
+        block_headings (List[str]): Column names for the DataFrame
+        data_pattern (str): Regex pattern to match data
+        
+    Returns:
+        pd.DataFrame: DataFrame containing transition data
+    """
+    block = get_section_between_start_and_end(log_content, start_marker, end_marker)
+    transitions_dataframe = get_dataframe_from_transition_string(block, block_headings, data_pattern)
+    return transitions_dataframe
+
+
+def convert_au_columns_to_debye(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert atomic units to Debye for dipole moment columns.
+    
+    Args:
+        df (pd.DataFrame): Input DataFrame
+        
+    Returns:
+        pd.DataFrame: DataFrame with converted units
+    """
+    au_debye_conversion_factor = 0.393456
+    for col in df.columns:
+        if col.endswith('au'):
+            df[col.replace('au', 'Debyes')] = df[col] / au_debye_conversion_factor
+            df = df.drop(col, axis=1)
+    return df
+
+
+def process_single_log_file(filepath: str) -> pd.DataFrame:
+    """
+    Process a single RASSCF log file and return the analysis results.
+    
+    Args:
+        filepath (str): Path to the log file
+        
+    Returns:
+        pd.DataFrame: DataFrame containing analysis results
+        
+    Raises:
+        FileNotFoundError: If the file doesn't exist
+        ValueError: If geometry information cannot be extracted
+    """
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"File not found: {filepath}")
+        
+    filename = os.path.basename(filepath)
+    phi, psi = extract_geometry(filename)
+    
+    if phi is None or psi is None:
+        raise ValueError(f"Could not extract geometry information from filename: {filename}")
+    
+    with open(filepath, 'r') as file:
+        log_content = file.read()
+    
+    # Extract data
+    roots = extract_roots(log_content)
+    dipole_moments = extract_dipole_moments(log_content)
+    transition_dipole_moment = get_transition_data(
+        log_content,
+        start_marker,
+        end_marker,
+        block_headings
+    )
+    
+    # Combine data
+    data = []
+    for root, root_data in roots.items():
+        for config_data in root_data['configurations']:
+            data.append({
+                'Phi': phi,
+                'Psi': psi,
+                'Root': root,
+                'Energy': root_data['energy'],
+                'Config': config_data['config'],
+                'Coeff': config_data['coeff'],
+                'Weight': config_data['weight'],
+                'Dipole Moment': dipole_moments.get(root, 0)  # Use 0 if no dipole moment found
+            })
+    
+    df = pd.DataFrame(data)
+    df = (
+        df
+        .rename(columns={'Root': 'end_state'})
+        .assign(start_state=1)
+        .merge(
+            transition_dipole_moment,
+            how='left',
+            on=['start_state', 'end_state']
+        )
+    )
+    
+    return convert_au_columns_to_debye(df)
+
+
+# Constants
+start_marker = r"\+\+ Dipole transition vectors \(spin-free states\):"
+end_marker = r"^\s*--\s*$"
+block_headings = [
+    'start_state',
+    'end_state',
+    'Dx_au',
+    'Dy_au',
+    'Dz_au',
+    'TotalD_au'
+]
+
+def filter_big_weights(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter out configurations with weights greater than 0.05.
+    """
+    return df[df['Weight'] > 0.30]
+
+
+def main():
+    """Main function to process all log files in the directory."""
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Use relative path to log files directory
+    log_dir = os.path.join(script_dir, "log_files")
+    
+    if not os.path.exists(log_dir):
+        raise FileNotFoundError(f"Log directory not found: {log_dir}")
+        
+    results = []
+    
+    for filename in os.listdir(log_dir):
+        if filename.endswith(".log"):
+            filepath = os.path.join(log_dir, filename)
+            try:
+                df = process_single_log_file(filepath)
+                results.append(df)
+            except (FileNotFoundError, ValueError) as e:
+                print(f"Error processing {filename}: {str(e)}")
+    
+    if results:
+        final_df = pd.concat(results, ignore_index=True)
+        output_file = os.path.join(script_dir, "transition_analysis_results.csv")
+        final_df = filter_big_weights(final_df)
+        final_df.to_csv(output_file, index=False)
+        print(f"Results saved to: {output_file}")
+    else:
+        print("No results were generated.")
+
+
+if __name__ == "__main__":
+    main()
