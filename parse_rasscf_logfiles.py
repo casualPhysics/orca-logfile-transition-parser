@@ -245,14 +245,17 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
             })
     
     df = pd.DataFrame(data)
+
     df = (
         df
         .rename(columns={'Root': 'end_state'})
         .assign(start_state=1)
+    )
+    df = (
+        df
         .merge(
             transition_dipole_moment,
-            how='left',
-            on=['start_state', 'end_state']
+            how='left'
         )
     )
     
@@ -303,6 +306,7 @@ def main():
         final_df = pd.concat(results, ignore_index=True)
         output_file = os.path.join(script_dir, "transition_analysis_results.csv")
         final_df = filter_big_weights(final_df)
+        final_df = final_df.sort_values(by=['Phi', 'Psi', 'start_state', 'end_state'])
         final_df.to_csv(output_file, index=False)
         print(f"Results saved to: {output_file}")
     else:
