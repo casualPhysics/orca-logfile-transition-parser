@@ -3,6 +3,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import seaborn as sns
+import os
+
+def create_output_folder(folder_name='output_plots'):
+    """Create output folder for saving plots"""
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
+        print(f"Created output folder: {folder_name}")
+    return folder_name
 
 def load_and_prepare_data(csv_file, value_column='totald_debyes'):
     """Load the CSV data and prepare it for plotting"""
@@ -38,7 +46,7 @@ def transform_phi_psi_coordinates(df):
     
     return df_transformed
 
-def create_3d_plot(df, transition_type, value_column='totald_debyes', save_plot=True):
+def create_3d_plot(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True):
     """Create a 3D plot for a specific transition type"""
     
     # Filter data for the specific transition
@@ -105,15 +113,15 @@ def create_3d_plot(df, transition_type, value_column='totald_debyes', save_plot=
     plt.tight_layout()
     
     if save_plot:
-        filename = f"energy_continuity_{transition_type.replace('*', 'star').replace(' ', '_')}.png"
+        filename = os.path.join(output_folder, f"energy_continuity_{transition_type.replace('*', 'star').replace(' ', '_')}.png")
         plt.savefig(filename, dpi=300, bbox_inches='tight')
-        print(f"Plot saved as: {filename}")
+        print(f"3D plot saved as: {filename}")
     
-    plt.show()
+    plt.close(fig)
     
     return fig, ax
 
-def create_heatmap_plot(df, transition_type, value_column='totald_debyes', save_plot=True):
+def create_heatmap_plot(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True):
     """Create a 2D heatmap for a specific transition type"""
     
     # Filter data for the specific transition
@@ -133,6 +141,7 @@ def create_heatmap_plot(df, transition_type, value_column='totald_debyes', save_
     heatmap_data = pivot_data.pivot(index='psi_transformed', columns='phi_transformed', values=value_column)
     
     # Create the heatmap
+    fig, ax = plt.subplots(figsize=(10, 8))
     
     # Create custom colormap
     sns.heatmap(heatmap_data, cmap='viridis', annot=False, cbar_kws={'label': value_column})
@@ -148,11 +157,115 @@ def create_heatmap_plot(df, transition_type, value_column='totald_debyes', save_
     plt.tight_layout()
     
     if save_plot:
-        filename = f"energy_heatmap_{transition_type.replace('*', 'star').replace(' ', '_')}.png"
+        filename = os.path.join(output_folder, f"energy_heatmap_{transition_type.replace('*', 'star').replace(' ', '_')}.png")
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Heatmap saved as: {filename}")
     
-    plt.show()
+    plt.close(fig)
+
+def create_distribution_plots(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True):
+    """Create distribution plots (histogram and box plot) for a specific transition type"""
+    
+    # Filter data for the specific transition
+    transition_data = df[df['transition'] == transition_type].copy()
+    
+    if len(transition_data) == 0:
+        print(f"No data found for transition: {transition_type}")
+        return
+    
+    # Create figure with subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Histogram
+    ax1.hist(transition_data[value_column], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
+    ax1.set_xlabel(value_column, fontsize=12)
+    ax1.set_ylabel('Frequency', fontsize=12)
+    ax1.set_title(f'{value_column} Distribution: {transition_type}', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    
+    # Add statistics text
+    mean_val = transition_data[value_column].mean()
+    std_val = transition_data[value_column].std()
+    min_val = transition_data[value_column].min()
+    max_val = transition_data[value_column].max()
+    
+    stats_text = f'Mean: {mean_val:.3f}\nStd: {std_val:.3f}\nMin: {min_val:.3f}\nMax: {max_val:.3f}'
+    ax1.text(0.02, 0.98, stats_text, transform=ax1.transAxes, fontsize=10,
+             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    # Box plot
+    ax2.boxplot(transition_data[value_column], patch_artist=True, 
+                boxprops=dict(facecolor='lightgreen', alpha=0.7))
+    ax2.set_ylabel(value_column, fontsize=12)
+    ax2.set_title(f'{value_column} Box Plot: {transition_type}', fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+    
+    # Add outliers info
+    Q1 = transition_data[value_column].quantile(0.25)
+    Q3 = transition_data[value_column].quantile(0.75)
+    IQR = Q3 - Q1
+    outliers = transition_data[(transition_data[value_column] < Q1 - 1.5*IQR) | 
+                              (transition_data[value_column] > Q3 + 1.5*IQR)]
+    
+    outlier_text = f'Outliers: {len(outliers)} points\n({len(outliers)/len(transition_data)*100:.1f}%)'
+    ax2.text(0.02, 0.98, outlier_text, transform=ax2.transAxes, fontsize=10,
+             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.8))
+    
+    plt.tight_layout()
+    
+    if save_plot:
+        filename = os.path.join(output_folder, f"distribution_{transition_type.replace('*', 'star').replace(' ', '_')}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Distribution plots saved as: {filename}")
+    
+    plt.close(fig)
+    
+    return fig, (ax1, ax2)
+
+def create_scatter_plot(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True):
+    """Create a scatter plot showing phi vs psi with color-coded values"""
+    
+    # Filter data for the specific transition
+    transition_data = df[df['transition'] == transition_type].copy()
+    
+    if len(transition_data) == 0:
+        print(f"No data found for transition: {transition_type}")
+        return
+    
+    # Transform coordinates
+    transition_data = transform_phi_psi_coordinates(transition_data)
+    
+    # Create the scatter plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    scatter = ax.scatter(transition_data['phi_transformed'], transition_data['psi_transformed'], 
+                        c=transition_data[value_column], cmap='viridis', s=50, alpha=0.7)
+    
+    # Customize the plot
+    ax.set_xlabel('Phi (degrees)', fontsize=12)
+    ax.set_ylabel('Psi (degrees)', fontsize=12)
+    ax.set_title(f'{value_column} Scatter Plot: {transition_type}', fontsize=14, fontweight='bold')
+    
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax, label=value_column)
+    
+    # Set axis limits
+    ax.set_xlim(-180, 180)
+    ax.set_ylim(-180, 180)
+    
+    # Add grid
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    if save_plot:
+        filename = os.path.join(output_folder, f"scatter_{transition_type.replace('*', 'star').replace(' ', '_')}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Scatter plot saved as: {filename}")
+    
+    plt.close(fig)
+    
+    return fig, ax
 
 def analyze_continuity(df, transition_type, value_column='totald_debyes'):
     """Analyze the continuity of values for a transition"""
@@ -186,8 +299,11 @@ def analyze_continuity(df, transition_type, value_column='totald_debyes'):
     else:
         print("✓ Complete grid coverage")
 
-def main(value_column='totald_debyes'):
+def main(value_column='totald_debyes', output_folder='output_plots'):
     """Main function to create all visualizations"""
+    
+    # Create output folder
+    output_folder = create_output_folder(output_folder)
     
     # Load data
     df, transitions = load_and_prepare_data('merged_results.csv', value_column=value_column)
@@ -207,19 +323,28 @@ def main(value_column='totald_debyes'):
         
         # Create 3D plot
         print(f"\nCreating 3D plot for {transition}...")
-        create_3d_plot(df, transition, value_column=value_column, save_plot=True)
+        create_3d_plot(df, transition, value_column=value_column, output_folder=output_folder, save_plot=True)
         
         # Create heatmap
         print(f"\nCreating heatmap for {transition}...")
-        create_heatmap_plot(df, transition, value_column=value_column, save_plot=True)
+        create_heatmap_plot(df, transition, value_column=value_column, output_folder=output_folder, save_plot=True)
+        
+        # Create distribution plots
+        print(f"\nCreating distribution plots for {transition}...")
+        create_distribution_plots(df, transition, value_column=value_column, output_folder=output_folder, save_plot=True)
+        
+        # Create scatter plot
+        print(f"\nCreating scatter plot for {transition}...")
+        create_scatter_plot(df, transition, value_column=value_column, output_folder=output_folder, save_plot=True)
         
         print(f"\nCompleted analysis for {transition}")
     
     print(f"\n{'='*60}")
-    print("All visualizations completed!")
+    print(f"All visualizations completed and saved to: {output_folder}")
     print(f"{'='*60}")
 
 if __name__ == "__main__":
     # You can change this to any column name you want to analyze
-    COLUMN_TO_ANALYZE = 'totald_debyes'  # Change this to your desired column name
-    main(value_column=COLUMN_TO_ANALYZE) 
+    COLUMN_TO_ANALYZE = 'ms_caspt2_energy_difference_ev'  # Change this to your desired column name
+    OUTPUT_FOLDER = 'output_plots'  # Change this to your desired output folder name
+    main(value_column=COLUMN_TO_ANALYZE, output_folder=OUTPUT_FOLDER) 
