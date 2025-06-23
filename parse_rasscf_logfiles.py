@@ -299,6 +299,22 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
         )
     )
     
+    # Calculate energy differences for CASPT2 and MS-CASPT2
+    # Group by phi and psi coordinates
+    if 'CASPT2_Energy' in df.columns:
+        caspt2_diff_hartree = df.groupby(['Phi', 'Psi'])['CASPT2_Energy'].transform(
+            lambda x: x - x.min()
+        )
+        # Convert from Hartree to eV (1 Hartree = 27.2114 eV)
+        df['CASPT2_Energy_Difference_eV'] = caspt2_diff_hartree * 27.2114
+    
+    if 'MS_CASPT2_Energy' in df.columns:
+        ms_caspt2_diff_hartree = df.groupby(['Phi', 'Psi'])['MS_CASPT2_Energy'].transform(
+            lambda x: x - x.min()
+        )
+        # Convert from Hartree to eV (1 Hartree = 27.2114 eV)
+        df['MS_CASPT2_Energy_Difference_eV'] = ms_caspt2_diff_hartree * 27.2114
+    
     return convert_au_columns_to_debye(df)
 
 
