@@ -71,6 +71,43 @@ def extract_roots(log_content: str) -> Dict[int, Dict]:
     return roots
 
 
+def extract_caspt2_energies(log_content: str) -> Dict[str, Dict[int, float]]:
+    """
+    Extract CASPT2 and MS-CASPT2 energies for each root from log file.
+    
+    Args:
+        log_content (str): Content of the log file
+        
+    Returns:
+        Dict[str, Dict[int, float]]: Dictionary containing CASPT2 and MS-CASPT2 energies for each root
+    """
+    # Pattern for CASPT2 energies (must start with CASPT2, not MS-CASPT2)
+    caspt2_pattern = re.compile(r'^::\s+CASPT2 Root\s+(\d+)\s+Total energy:\s+([-+]?\d+\.\d+)', re.MULTILINE)
+    
+    # Pattern for MS-CASPT2 energies (must start with MS-CASPT2)
+    ms_caspt2_pattern = re.compile(r'^::\s+MS-CASPT2 Root\s+(\d+)\s+Total energy:\s+([-+]?\d+\.\d+)', re.MULTILINE)
+    
+    caspt2_energies = {}
+    ms_caspt2_energies = {}
+    
+    # Extract CASPT2 energies
+    for match in caspt2_pattern.finditer(log_content):
+        root_num = int(match.group(1))
+        energy = float(match.group(2))
+        caspt2_energies[root_num] = energy
+    
+    # Extract MS-CASPT2 energies
+    for match in ms_caspt2_pattern.finditer(log_content):
+        root_num = int(match.group(1))
+        energy = float(match.group(2))
+        ms_caspt2_energies[root_num] = energy
+    
+    return {
+        'CASPT2': caspt2_energies,
+        'MS-CASPT2': ms_caspt2_energies
+    }
+
+
 def extract_dipole_moments(log_content: str) -> Dict[int, float]:
     """
     Extract dipole moments for each root from RASSCF log file.
@@ -222,6 +259,7 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
     # Extract data
     roots = extract_roots(log_content)
     dipole_moments = extract_dipole_moments(log_content)
+    caspt2_energies = extract_caspt2_energies(log_content)
     transition_dipole_moment = get_transition_data(
         log_content,
         start_marker,
@@ -238,6 +276,8 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
                 'Psi': psi,
                 'Root': root,
                 'Energy': root_data['energy'],
+                'CASPT2_Energy': caspt2_energies['CASPT2'].get(root, None),
+                'MS_CASPT2_Energy': caspt2_energies['MS-CASPT2'].get(root, None),
                 'Config': config_data['config'],
                 'Coeff': config_data['coeff'],
                 'Weight': config_data['weight'],
@@ -308,6 +348,7 @@ def main():
         final_df = filter_big_weights(final_df)
         final_df = final_df.sort_values(by=['Phi', 'Psi', 'start_state', 'end_state'])
         final_df.to_csv(output_file, index=False)
+
         print(f"Results saved to: {output_file}")
     else:
         print("No results were generated.")
