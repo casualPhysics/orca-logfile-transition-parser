@@ -345,6 +345,6 @@ def main(value_column='totald_debyes', output_folder='output_plots'):
 
 if __name__ == "__main__":
     # You can change this to any column name you want to analyze
-    COLUMN_TO_ANALYZE = 'ms_caspt2_energy_difference_ev'  # Change this to your desired column name
+    COLUMN_TO_ANALYZE = 'totald_debyes'  # Change this to your desired column name
     OUTPUT_FOLDER = 'output_plots'  # Change this to your desired output folder name
     main(value_column=COLUMN_TO_ANALYZE, output_folder=OUTPUT_FOLDER) 
