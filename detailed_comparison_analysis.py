@@ -129,30 +129,53 @@ def analyze_geometry_differences(csv_file, phi, psi, geometry_name):
     return geometry_data
 
 def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
-    """Display a table of absolute energies (CASPT2 and MS-CASPT2) for ground and excited states for a given geometry, with high precision."""
+    """Display a table of absolute energies (CASPT2 and MS-CASPT2) for ground and excited states for a given geometry, with high precision, all in eV. Includes ground state and transition name."""
     df = pd.read_csv(csv_file)
     geometry_data = df[(df['phi'] == phi) & (df['psi'] == psi)].copy()
     if geometry_data.empty:
         print(f"No data found for geometry phi={phi}, psi={psi}")
         return None
-    print(f"\n{'='*80}")
+    print(f"\n{'='*110}")
     print(f"ABSOLUTE ENERGIES TABLE: {geometry_name} (φ={phi}°, ψ={psi}°)")
-    print(f"{'='*80}")
-    print(f"{'State':<8} {'CASPT2 Energy (Hartree)':<25} {'MS-CASPT2 Energy (Hartree)':<28} {'Difference (Hartree)':<22}")
-    print("-" * 90)
-    states = sorted(geometry_data['end_state'].unique())
-    for state in states:
-        state_data = geometry_data[geometry_data['end_state'] == state]
-        if not state_data.empty:
-            caspt2_abs = state_data.iloc[0]['caspt2_energy']
-            ms_caspt2_abs = state_data.iloc[0]['ms_caspt2_energy']
-            diff_abs = ms_caspt2_abs - caspt2_abs
-            # Format difference to 10 significant figures, using scientific notation if needed
-            if diff_abs == 0:
-                diff_str = f"{0:.10e}"
-            else:
-                diff_str = f"{diff_abs:.10e}" if abs(diff_abs) < 1e-4 or abs(diff_abs) > 1e+6 else f"{diff_abs:.10g}"
-            print(f"{state:<8} {caspt2_abs:<25.10f} {ms_caspt2_abs:<28.10f} {diff_str:<22}")
+    print(f"{'='*110}")
+    print(f"{'Start':<7} {'End':<7} {'Transition':<25} {'CASPT2 Energy (eV)':<25} {'MS-CASPT2 Energy (eV)':<28} {'Difference (eV)':<22}")
+    print("-" * 110)
+    # Sort by start_state, end_state for clarity
+    geometry_data = geometry_data.sort_values(by=['start_state', 'end_state'])
+    # Find all unique states (including ground state)
+    all_states = set(geometry_data['end_state']).union(set(geometry_data['start_state']))
+    # For each unique state, print its absolute energy (ground state: start_state==end_state==1)
+    for state in sorted(all_states):
+        # Try to find a row where start_state==end_state==state (ground state)
+        ground_row = geometry_data[(geometry_data['start_state'] == state) & (geometry_data['end_state'] == state)]
+        if not ground_row.empty:
+            row = ground_row.iloc[0]
+            start_state = row['start_state']
+            end_state = row['end_state']
+            transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else '(ground state)'
+            caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
+            ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
+            diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
+            def sig_str(val):
+                if val == 0:
+                    return f"{0:.10e}"
+                return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
+            print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
+    # Now print all other transitions (where start_state != end_state)
+    for _, row in geometry_data.iterrows():
+        if row['start_state'] == row['end_state']:
+            continue  # already printed above
+        start_state = row['start_state']
+        end_state = row['end_state']
+        transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else ''
+        caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
+        ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
+        diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
+        def sig_str(val):
+            if val == 0:
+                return f"{0:.10e}"
+            return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
+        print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
     print("\n")
 
 def create_comparison_summary(geometry1=None, geometry2=None):
@@ -263,8 +286,8 @@ if __name__ == "__main__":
     display_absolute_energies_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
     display_absolute_energies_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
 
-    create_comparison_summary(
-        geometry1=geometry1,
-        geometry2=geometry2
-    )
+    # create_comparison_summary(
+    #     geometry1=geometry1,
+    #     geometry2=geometry2
+    # )
     
