@@ -128,6 +128,33 @@ def analyze_geometry_differences(csv_file, phi, psi, geometry_name):
     
     return geometry_data
 
+def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
+    """Display a table of absolute energies (CASPT2 and MS-CASPT2) for ground and excited states for a given geometry, with high precision."""
+    df = pd.read_csv(csv_file)
+    geometry_data = df[(df['phi'] == phi) & (df['psi'] == psi)].copy()
+    if geometry_data.empty:
+        print(f"No data found for geometry phi={phi}, psi={psi}")
+        return None
+    print(f"\n{'='*80}")
+    print(f"ABSOLUTE ENERGIES TABLE: {geometry_name} (φ={phi}°, ψ={psi}°)")
+    print(f"{'='*80}")
+    print(f"{'State':<8} {'CASPT2 Energy (Hartree)':<25} {'MS-CASPT2 Energy (Hartree)':<28} {'Difference (Hartree)':<22}")
+    print("-" * 90)
+    states = sorted(geometry_data['end_state'].unique())
+    for state in states:
+        state_data = geometry_data[geometry_data['end_state'] == state]
+        if not state_data.empty:
+            caspt2_abs = state_data.iloc[0]['caspt2_energy']
+            ms_caspt2_abs = state_data.iloc[0]['ms_caspt2_energy']
+            diff_abs = ms_caspt2_abs - caspt2_abs
+            # Format difference to 10 significant figures, using scientific notation if needed
+            if diff_abs == 0:
+                diff_str = f"{0:.10e}"
+            else:
+                diff_str = f"{diff_abs:.10e}" if abs(diff_abs) < 1e-4 or abs(diff_abs) > 1e+6 else f"{diff_abs:.10g}"
+            print(f"{state:<8} {caspt2_abs:<25.10f} {ms_caspt2_abs:<28.10f} {diff_str:<22}")
+    print("\n")
+
 def create_comparison_summary(geometry1=None, geometry2=None):
     """Create a comprehensive comparison summary between the two geometries
     
@@ -229,8 +256,15 @@ def create_comparison_summary(geometry1=None, geometry2=None):
 
 if __name__ == "__main__":    
     # Example usage with custom geometries
+    geometry1 = (225, 120, "Beta-Strand")
+    geometry2 = (300, 300, "Alpha-Helix")
+
+    # Display absolute energies tables for both geometries
+    display_absolute_energies_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
+    display_absolute_energies_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
+
     create_comparison_summary(
-        geometry1=(225, 120, "Beta-Strand"),
-        geometry2=(200, 300, "Alpha-Helix")
+        geometry1=geometry1,
+        geometry2=geometry2
     )
     

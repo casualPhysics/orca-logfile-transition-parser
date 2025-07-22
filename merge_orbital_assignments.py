@@ -16,9 +16,6 @@ def merge_orbital_assignments_and_analysis(orbital_assignments_path, transition_
         how="left"
     )
 
-    # Round all numerical columns to 3 decimal places
-    numeric_cols = merged.select_dtypes(include='number').columns
-    merged[numeric_cols] = merged[numeric_cols].round(3)
     return merged
 
 
