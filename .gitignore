@@ -41,6 +41,7 @@ ENV/
 .specstory/
 .cursorindexingignore
 log_files/
+output_plots/
 
 # Jupyter Notebook
 .ipynb_checkpoints
