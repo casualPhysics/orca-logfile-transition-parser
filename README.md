@@ -9,6 +9,9 @@ This Python tool analyzes RASSCF (Restricted Active Space Self-Consistent Field)
 - Handles multiple log files in a directory
 - Combines results into a structured CSV format
 - Supports geometry information extraction from filenames
+- Merges orbital assignments with transition analysis results
+- Includes ground state data for complete energy analysis
+- Calculates energy differences in electron volts (eV)
 
 ## Requirements
 
@@ -31,47 +34,87 @@ pip install -r requirements.txt
 
 ## Usage
 
+### Step 1: Parse RASSCF Log Files
 1. Place your RASSCF log files in the `log_files` directory. The filenames should contain geometry information in the format `phi_psi.log` (e.g., `90_180.log`).
 
-2. Run the analysis script:
+2. Run the log file parsing script:
 ```bash
-python analyse_rasscf_logfile.py
+python parse_rasscf_logfiles.py
 ```
 
 3. The results will be saved in `transition_analysis_results.csv` in the project root directory.
 
-4. **(New step)** Merge orbital assignments with transition analysis results to create `merged_results.csv`:
+### Step 2: Merge with Orbital Assignments and Add Ground State
+4. **Merge orbital assignments with transition analysis results** to create `merged_results.csv`:
 ```bash
-python merge_orbital_assignments.py
+python construct_transition_data.py
 ```
-This will generate `merged_results.csv` in the project root, which is required for detailed comparison and plotting scripts.
+
+This script will:
+- Merge transition analysis results with orbital assignments from an external CSV file
+- Calculate energy differences in eV (converted from Hartree)
+- Filter for specific transitions (n_to_pi_*_L, n_to_pi_*_R, pi_nb_to_pi_*_R, pi_nb_to_pi_*_L)
+- **Add ground state rows** (end_state = 1) for each geometry with transition marked as "GROUND"
+- Sort results by phi, psi, config, and end_state
+
+**Note**: You'll need to update the `orbital_assignments_path` variable in the script to point to your orbital assignments CSV file.
+
+### Step 3: Analysis and Visualization
+5. Run detailed comparison analysis:
+```bash
+python detailed_comparison_analysis.py
+```
+
+6. Generate energy continuity plots:
+```bash
+python plot_energy_continuity.py
+```
 
 ## Output Format
 
-The output CSV file contains the following columns:
-- `Phi`: Phi angle from filename
-- `Psi`: Psi angle from filename
-- `end_state`: Root number
+The final `merged_results.csv` file contains the following columns:
+- `phi`, `psi`: Dihedral angles from filename
+- `end_state`: Root number (1 = ground state)
 - `start_state`: Initial state (always 1)
-- `Energy`: Energy of the state
-- `Config`: Configuration string
-- `Coeff`: CI coefficient
-- `Weight`: Weight of the configuration
-- `Dipole Moment`: Total dipole moment
-- `Dx_Debyes`, `Dy_Debyes`, `Dz_Debyes`: Transition dipole moments in Debye units
-- `TotalD_Debyes`: Total transition dipole moment in Debye units
+- `energy`: Energy of the state in Hartree
+- `config`: Configuration string
+- `coeff`: CI coefficient
+- `weight`: Weight of the configuration
+- `dipole_moment`: Total dipole moment
+- `dx_debyes`, `dy_debyes`, `dz_debyes`: Transition dipole moments in Debye units
+- `totald_debyes`: Total transition dipole moment in Debye units
+- `transition`: Transition type (e.g., "n_to_pi_*_L", "GROUND")
+- `energy_difference_eV`: Energy difference from ground state in eV
 
 ### Example Output
 
 Here's an example of the output data (truncated for clarity):
 
-| Phi | Psi | end_state | Energy | Config | Coeff | Weight | Dipole Moment | Dx_Debyes | Dy_Debyes | Dz_Debyes | TotalD_Debyes |
-|-----|-----|-----------|---------|---------|--------|---------|---------------|------------|------------|------------|---------------|
-| 240 | 90 | 1 | -453.959 | 22222200 | 0.963 | 0.927 | 1.429 | - | - | - | - |
-| 240 | 90 | 2 | -453.743 | 222u220d | 0.947 | 0.898 | 2.516 | -0.065 | -0.068 | 0.173 | 0.197 |
-| 240 | 90 | 3 | -453.741 | 22u222d0 | -0.894 | 0.800 | 3.013 | -0.244 | -0.208 | -0.036 | 0.323 |
-| 240 | 90 | 4 | -453.645 | 22222ud0 | -0.830 | 0.689 | 3.273 | -4.238 | 1.524 | -0.824 | 4.578 |
-| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+| phi | psi | end_state | energy | config | coeff | weight | dipole_moment | dx_debyes | dy_debyes | dz_debyes | totald_debyes | transition | energy_difference_eV |
+|-----|-----|-----------|---------|---------|--------|---------|---------------|------------|------------|------------|---------------|------------|-------------------|
+| 240 | 90 | 1 | -453.959 | 22222200 | 0.963 | 0.927 | 1.429 | - | - | - | - | GROUND | 0.000 |
+| 240 | 90 | 2 | -453.743 | 222u220d | 0.947 | 0.898 | 2.516 | -0.065 | -0.068 | 0.173 | 0.197 | n_to_pi_*_R | 5.959 |
+| 240 | 90 | 3 | -453.741 | 22u222d0 | -0.894 | 0.800 | 3.013 | -0.244 | -0.208 | -0.036 | 0.323 | n_to_pi_*_L | 6.286 |
+| 240 | 90 | 4 | -453.645 | 22222ud0 | -0.830 | 0.689 | 3.273 | -4.238 | 1.524 | -0.824 | 4.578 | pi_nb_to_pi_*_L | 8.327 |
+| ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... |
+
+## Script Details
+
+### construct_transition_data.py
+This script performs the following operations:
+
+1. **Merges orbital assignments** with transition analysis results
+2. **Calculates energy differences** in eV (converted from Hartree using 27.2114 eV/Hartree)
+3. **Filters transitions** to include only:
+   - `n_to_pi_*_L`
+   - `n_to_pi_*_R` 
+   - `pi_nb_to_pi_*_R`
+   - `pi_nb_to_pi_*_L`
+4. **Adds ground state data** for each unique (phi, psi, config) geometry
+5. **Marks ground states** with transition = "GROUND"
+6. **Sorts results** by geometry and state
+
+**Configuration**: Update the `orbital_assignments_path` variable to point to your orbital assignments CSV file.
 
 ## Example
 
@@ -84,7 +127,7 @@ energy= -1234.5678
     2  2u3u4u   0.5678   0.3224
 ```
 
-The output will include all configurations with their respective coefficients and weights, along with any dipole moment information found in the file.
+The output will include all configurations with their respective coefficients and weights, along with any dipole moment information found in the file, plus ground state data for complete energy analysis.
 
 ## Contributing
 
