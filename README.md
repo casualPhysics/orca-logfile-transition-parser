@@ -40,6 +40,12 @@ python analyse_rasscf_logfile.py
 
 3. The results will be saved in `transition_analysis_results.csv` in the project root directory.
 
+4. **(New step)** Merge orbital assignments with transition analysis results to create `merged_results.csv`:
+```bash
+python merge_orbital_assignments.py
+```
+This will generate `merged_results.csv` in the project root, which is required for detailed comparison and plotting scripts.
+
 ## Output Format
 
 The output CSV file contains the following columns:
