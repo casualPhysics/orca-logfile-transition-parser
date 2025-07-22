@@ -40,6 +40,7 @@ ENV/
 # Project specific
 .specstory/
 .cursorindexingignore
+log_files/
 
 # Jupyter Notebook
 .ipynb_checkpoints
