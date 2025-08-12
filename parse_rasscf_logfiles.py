@@ -7,6 +7,33 @@ import numpy as np
 # Constants for energy conversion
 HARTREE_TO_EV = 27.211386245988  # 1 Hartree = 27.211386245988 eV
 
+"""
+CASPT2 Log File Parser
+
+This module provides functions to parse CASPT2 energy results from ORCA log files.
+
+Key Functions:
+- extract_caspt2_root_energies(): Extract basic reference and total energies for each root
+- extract_caspt2_detailed_energies(): Extract all available energy components for each root
+
+Energy Units:
+- All energies are returned in Hartree by default
+- Use energy_unit='ev' parameter to get energies in electron volts (eV)
+- Reference weights are always returned as dimensionless values
+
+Example Usage:
+    from parse_rasscf_logfiles import extract_caspt2_root_energies
+    
+    with open('log_file.log', 'r') as f:
+        log_content = f.read()
+    
+    # Get basic energies in eV
+    energies = extract_caspt2_root_energies(log_content, energy_unit='ev')
+    
+    for root_num, energy_data in energies.items():
+        print(f"Root {root_num}: {energy_data['total_energy']:.3f} eV")
+"""
+
 
 def hartree_to_ev(hartree_value: float) -> float:
     """
@@ -199,6 +226,91 @@ def extract_caspt2_root_energies(log_content: str, energy_unit: str = 'hartree')
                     'reference_energy': reference_energy,
                     'total_energy': total_energy
                 }
+    
+    return root_energies
+
+
+def extract_caspt2_detailed_energies(log_content: str, energy_unit: str = 'hartree') -> Dict[int, Dict[str, float]]:
+    """
+    Extract detailed CASPT2 energies for each root from log file, including all available energy components.
+    
+    This function parses the 'FINAL CASPT2 RESULT' sections for each root group and extracts:
+    - Reference energy
+    - E2 (Non-variational) correlation energy
+    - Shift correction
+    - E2 (Variational) correlation energy
+    - Total energy
+    - Reference weight
+    - Correlation energy contributions (Active & Virtual Only, One Inactive Excited, Two Inactive Excited)
+    
+    Args:
+        log_content (str): Content of the log file
+        energy_unit (str): Energy unit for output ('hartree' or 'ev')
+        
+    Returns:
+        Dict[int, Dict[str, float]]: Dictionary containing detailed energy information for each root
+    """
+    # Pattern to find CASPT2 computation groups
+    group_pattern = re.compile(r'\+\+ CASPT2 computation for group\s+(\d+)')
+    
+    # Pattern to find FINAL CASPT2 RESULT sections
+    final_result_pattern = re.compile(
+        r'FINAL CASPT2 RESULT:(.*?)(?=\+\+|\Z)',
+        re.DOTALL
+    )
+    
+    # Patterns to extract various energy components
+    patterns = {
+        'reference_energy': r'Reference energy:\s+([-+]?\d+\.\d+)',
+        'e2_non_variational': r'E2 \(Non-variational\):\s+([-+]?\d+\.\d+)',
+        'shift_correction': r'Shift correction:\s+([-+]?\d+\.\d+)',
+        'e2_variational': r'E2 \(Variational\):\s+([-+]?\d+\.\d+)',
+        'total_energy': r'Total energy:\s+([-+]?\d+\.\d+)',
+        'reference_weight': r'Reference weight:\s+([-+]?\d+\.\d+)',
+        'active_virtual_only': r'Active & Virtual Only:\s+([-+]?\d+\.\d+)',
+        'one_inactive_excited': r'One Inactive Excited:\s+([-+]?\d+\.\d+)',
+        'two_inactive_excited': r'Two Inactive Excited:\s+([-+]?\d+\.\d+)'
+    }
+    
+    compiled_patterns = {key: re.compile(pattern) for key, pattern in patterns.items()}
+    
+    root_energies = {}
+    
+    # Find all CASPT2 computation groups
+    group_matches = list(group_pattern.finditer(log_content))
+    
+    for i, group_match in enumerate(group_matches):
+        group_num = int(group_match.group(1))
+        
+        # Find the corresponding FINAL CASPT2 RESULT section
+        if i < len(group_matches) - 1:
+            # Extract content between this group and the next
+            start_pos = group_match.end()
+            end_pos = group_matches[i + 1].start()
+            section_content = log_content[start_pos:end_pos]
+        else:
+            # For the last group, extract to the end of the file
+            section_content = log_content[group_match.end():]
+        
+        # Look for FINAL CASPT2 RESULT in this section
+        final_result_match = final_result_pattern.search(section_content)
+        if final_result_match:
+            result_content = final_result_match.group(1)
+            
+            # Extract all available energy components
+            energies = {}
+            for key, pattern in compiled_patterns.items():
+                match = pattern.search(result_content)
+                if match:
+                    value = float(match.group(1))
+                    # Convert to eV if requested
+                    if energy_unit.lower() == 'ev' and key != 'reference_weight':
+                        value = hartree_to_ev(value)
+                    energies[key] = value
+            
+            # Only store if we have at least reference and total energy
+            if 'reference_energy' in energies and 'total_energy' in energies:
+                root_energies[group_num] = energies
     
     return root_energies
 
