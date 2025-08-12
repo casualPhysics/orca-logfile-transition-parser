@@ -4,6 +4,22 @@ from typing import Dict, List, Tuple, Optional
 import pandas as pd
 import numpy as np
 
+# Constants for energy conversion
+HARTREE_TO_EV = 27.211386245988  # 1 Hartree = 27.211386245988 eV
+
+
+def hartree_to_ev(hartree_value: float) -> float:
+    """
+    Convert energy from Hartree to electron volts.
+    
+    Args:
+        hartree_value (float): Energy in Hartree
+        
+    Returns:
+        float: Energy in electron volts
+    """
+    return hartree_value * HARTREE_TO_EV
+
 
 def extract_roots(log_content: str) -> Dict[int, Dict]:
     """
@@ -106,6 +122,85 @@ def extract_caspt2_energies(log_content: str) -> Dict[str, Dict[int, float]]:
         'CASPT2': caspt2_energies,
         'MS-CASPT2': ms_caspt2_energies
     }
+
+
+def extract_caspt2_root_energies(log_content: str, energy_unit: str = 'hartree') -> Dict[int, Dict[str, float]]:
+    """
+    Extract CASPT2 energies for each root from log file, including reference energy and total energy.
+    
+    This function parses the 'FINAL CASPT2 RESULT' sections for each root group.
+    
+    Args:
+        log_content (str): Content of the log file
+        energy_unit (str): Energy unit for output ('hartree' or 'ev')
+        
+    Returns:
+        Dict[int, Dict[str, float]]: Dictionary containing energy information for each root
+                                     Keys: root number, Values: dict with 'reference_energy' and 'total_energy'
+    """
+    # Pattern to find CASPT2 computation groups
+    group_pattern = re.compile(r'\+\+ CASPT2 computation for group\s+(\d+)')
+    
+    # Pattern to find FINAL CASPT2 RESULT sections
+    final_result_pattern = re.compile(
+        r'FINAL CASPT2 RESULT:(.*?)(?=\+\+|\Z)',
+        re.DOTALL
+    )
+    
+    # Pattern to extract reference energy
+    reference_pattern = re.compile(r'Reference energy:\s+([-+]?\d+\.\d+)')
+    
+    # Pattern to extract total energy
+    total_pattern = re.compile(r'Total energy:\s+([-+]?\d+\.\d+)')
+    
+    root_energies = {}
+    
+    # Find all CASPT2 computation groups
+    group_matches = list(group_pattern.finditer(log_content))
+    
+    for i, group_match in enumerate(group_matches):
+        group_num = int(group_match.group(1))
+        
+        # Find the corresponding FINAL CASPT2 RESULT section
+        if i < len(group_matches) - 1:
+            # Extract content between this group and the next
+            start_pos = group_match.end()
+            end_pos = group_matches[i + 1].start()
+            section_content = log_content[start_pos:end_pos]
+        else:
+            # For the last group, extract to the end of the file
+            section_content = log_content[group_match.end():]
+        
+        # Look for FINAL CASPT2 RESULT in this section
+        final_result_match = final_result_pattern.search(section_content)
+        if final_result_match:
+            result_content = final_result_match.group(1)
+            
+            # Extract reference energy
+            ref_match = reference_pattern.search(result_content)
+            reference_energy = None
+            if ref_match:
+                reference_energy = float(ref_match.group(1))
+            
+            # Extract total energy
+            total_match = total_pattern.search(result_content)
+            total_energy = None
+            if total_match:
+                total_energy = float(total_match.group(1))
+            
+            # Store energies if both were found
+            if reference_energy is not None and total_energy is not None:
+                # Convert to eV if requested
+                if energy_unit.lower() == 'ev':
+                    reference_energy = hartree_to_ev(reference_energy)
+                    total_energy = hartree_to_ev(total_energy)
+                
+                root_energies[group_num] = {
+                    'reference_energy': reference_energy,
+                    'total_energy': total_energy
+                }
+    
+    return root_energies
 
 
 def extract_dipole_moments(log_content: str) -> Dict[int, float]:

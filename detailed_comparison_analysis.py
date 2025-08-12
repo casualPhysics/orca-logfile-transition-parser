@@ -156,11 +156,15 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
             caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
             ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
             diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
+            caspt2_abs_h = row['caspt2_energy']
+            ms_caspt2_abs_h = row['ms_caspt2_energy']
+            diff_abs_h = ms_caspt2_abs_h - caspt2_abs_h
             def sig_str(val):
                 if val == 0:
                     return f"{0:.10e}"
                 return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
             print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
+            print(f"{'':<7} {'':<7} {'(Hartree)':<25} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
     # Now print all other transitions (where start_state != end_state)
     for _, row in geometry_data.iterrows():
         if row['start_state'] == row['end_state']:
@@ -171,11 +175,64 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
         caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
         ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
         diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
+        caspt2_abs_h = row['caspt2_energy']
+        ms_caspt2_abs_h = row['ms_caspt2_energy']
+        diff_abs_h = ms_caspt2_abs_h - caspt2_abs_h
         def sig_str(val):
             if val == 0:
                 return f"{0:.10e}"
             return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
         print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
+        print(f"{'':<7} {'':<7} {'(Hartree)':<25} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
+    print("\n")
+
+def pretty_print_geometry_table(csv_file, phi, psi, geometry_name):
+    """Pretty print a summary table for a given geometry from merged_results.csv."""
+    try:
+        from tabulate import tabulate
+        use_tabulate = True
+    except ImportError:
+        use_tabulate = False
+    df = pd.read_csv(csv_file)
+    geometry_data = df[(df['phi'] == phi) & (df['psi'] == psi)].copy()
+    if geometry_data.empty:
+        print(f"No data found for geometry phi={phi}, psi={psi}")
+        return None
+    print(f"\n{'='*80}")
+    print(f"PRETTY PRINTED TABLE: {geometry_name} (φ={phi}°, ψ={psi}°)")
+    print(f"{'='*80}")
+    # Prepare table data
+    table = []
+    for _, row in geometry_data.iterrows():
+        start_state = int(row['start_state'])
+        end_state = int(row['end_state'])
+        transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else ''
+        caspt2_ev = row['caspt2_energy'] * 27.211407953
+        ms_caspt2_ev = row['ms_caspt2_energy'] * 27.211407953
+        diff_ev = ms_caspt2_ev - caspt2_ev
+        caspt2_h = row['caspt2_energy']
+        ms_caspt2_h = row['ms_caspt2_energy']
+        diff_h = ms_caspt2_h - caspt2_h
+        config = row['config'] if 'config' in row and pd.notnull(row['config']) else ''
+        coeff = f"{row['coeff']:.3f}" if 'coeff' in row and pd.notnull(row['coeff']) else ''
+        weight = f"{row['weight']:.3f}" if 'weight' in row and pd.notnull(row['weight']) else ''
+        table.append([
+            start_state, end_state, transition,
+            f"{caspt2_ev:.6f}", f"{ms_caspt2_ev:.6f}", f"{diff_ev:+.6f}",
+            f"{caspt2_h:.8f}", f"{ms_caspt2_h:.8f}", f"{diff_h:+.8f}",
+            config, coeff, weight
+        ])
+    headers = [
+        "Start", "End", "Transition",
+        "CASPT2 (eV)", "MS-CASPT2 (eV)", "Δ (eV)",
+        "CASPT2 (Ha)", "MS-CASPT2 (Ha)", "Δ (Ha)",
+        "Configuration", "Coeff", "Weight"
+    ]
+    if use_tabulate:
+        print(tabulate(table, headers=headers, tablefmt="fancy_grid", showindex=False))
+    else:
+        pd_table = pd.DataFrame(table, columns=headers)
+        print(pd_table.to_string(index=False))
     print("\n")
 
 def create_comparison_summary(geometry1=None, geometry2=None):
@@ -280,12 +337,13 @@ def create_comparison_summary(geometry1=None, geometry2=None):
 if __name__ == "__main__":    
     # Example usage with custom geometries
     geometry1 = (225, 120, "Beta-Strand")
-    geometry2 = (300, 300, "Alpha-Helix")
+    # geometry1 = (300, 300, "Alpha-Helix")
 
     # Display absolute energies tables for both geometries
     display_absolute_energies_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
-    display_absolute_energies_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
+    # display_absolute_energies_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
 
+    pretty_print_geometry_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
     # create_comparison_summary(
     #     geometry1=geometry1,
     #     geometry2=geometry2
