@@ -315,6 +315,103 @@ def extract_caspt2_detailed_energies(log_content: str, energy_unit: str = 'hartr
     return root_energies
 
 
+def extract_ms_caspt2_with_occupations(log_content: str, energy_unit: str = 'hartree') -> Dict[int, Dict[str, any]]:
+    """
+    Extract MS-CASPT2 energies and highest weight occupation for each root from log file.
+    
+    This function parses the MS-CASPT2 energy section and the mixed CI coefficients section
+    to extract for each root:
+    - Total energy
+    - Highest weight occupation pattern
+    - Weight of the highest occupation pattern
+    
+    Args:
+        log_content (str): Content of the log file
+        energy_unit (str): Energy unit for output ('hartree' or 'ev')
+        
+    Returns:
+        Dict[int, Dict[str, any]]: Dictionary containing MS-CASPT2 information for each root
+                                   Keys: root number, Values: dict with 'energy', 'highest_occupation', 'weight'
+    """
+    # Pattern to find MS-CASPT2 energies
+    ms_caspt2_pattern = re.compile(r'^::\s+MS-CASPT2 Root\s+(\d+)\s+Total energy:\s+([-+]?\d+\.\d+)', re.MULTILINE)
+    
+    # Pattern to find the mixed CI coefficients section
+    mixed_ci_start = "++ Mixed CI coefficients:"
+    
+    # Extract MS-CASPT2 energies
+    ms_caspt2_energies = {}
+    for match in ms_caspt2_pattern.finditer(log_content):
+        root_num = int(match.group(1))
+        energy = float(match.group(2))
+        ms_caspt2_energies[root_num] = energy
+    
+    # Extract mixed CI coefficients section
+    mixed_ci_start_pos = log_content.find(mixed_ci_start)
+    if mixed_ci_start_pos == -1:
+        return {}
+    
+    # Find the end marker after the start position
+    # Look for the marker that indicates the end of mixed CI coefficients
+    mixed_ci_end_pos = log_content.find("THE ORIGINAL CI ARRAYS ARE NOW MIXED", mixed_ci_start_pos)
+    if mixed_ci_end_pos == -1:
+        # Look for double newline which often indicates end of section
+        mixed_ci_end_pos = log_content.find("\n\n", mixed_ci_start_pos)
+        if mixed_ci_end_pos == -1:
+            # Fallback to looking for "--" if the main marker is not found
+            mixed_ci_end_pos = log_content.find("--", mixed_ci_start_pos)
+            if mixed_ci_end_pos == -1:
+                return {}
+    
+    mixed_ci_section = log_content[mixed_ci_start_pos:mixed_ci_end_pos]
+    
+    # Pattern to find root sections in mixed CI coefficients
+    root_section_pattern = re.compile(r'The CI coefficients for the MIXED state nr\.\s+(\d+)(.*?)(?=The CI coefficients for the MIXED state nr\.|\Z)', re.DOTALL)
+    
+    # Pattern to extract occupation and weight from each configuration line
+    config_pattern = re.compile(r'^\s+\d+\s+\([^)]+\)\s+([0-9ud]+)\s+([-+]?\d+\.\d+)\s+([-+]?\d+\.\d+)', re.MULTILINE)
+    
+    root_data = {}
+    
+    # Process each root section
+    for root_match in root_section_pattern.finditer(mixed_ci_section):
+        root_num = int(root_match.group(1))
+        root_content = root_match.group(2)
+        
+        # Find all configurations for this root
+        configs = []
+        for config_match in config_pattern.finditer(root_content):
+            occupation = config_match.group(1)
+            coefficient = float(config_match.group(2))
+            weight = float(config_match.group(3))
+            configs.append({
+                'occupation': occupation,
+                'coefficient': coefficient,
+                'weight': weight
+            })
+        
+        # Find the configuration with the highest weight
+        if configs:
+            highest_weight_config = max(configs, key=lambda x: x['weight'])
+            
+            # Get the energy for this root
+            energy = ms_caspt2_energies.get(root_num)
+            
+            if energy is not None:
+                # Convert to eV if requested
+                if energy_unit.lower() == 'ev':
+                    energy = hartree_to_ev(energy)
+                
+                root_data[root_num] = {
+                    'energy': energy,
+                    'highest_occupation': highest_weight_config['occupation'],
+                    'weight': highest_weight_config['weight'],
+                    'coefficient': highest_weight_config['coefficient']
+                }
+    
+    return root_data
+
+
 def extract_dipole_moments(log_content: str) -> Dict[int, float]:
     """
     Extract dipole moments for each root from RASSCF log file.
@@ -467,6 +564,8 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
     roots = extract_roots(log_content)
     dipole_moments = extract_dipole_moments(log_content)
     caspt2_energies = extract_caspt2_energies(log_content)
+    caspt2_detailed_energies = extract_caspt2_detailed_energies(log_content)
+    ms_caspt2_occupations = extract_ms_caspt2_with_occupations(log_content)
     transition_dipole_moment = get_transition_data(
         log_content,
         start_marker,
@@ -478,13 +577,38 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
     data = []
     for root, root_data in roots.items():
         for config_data in root_data['configurations']:
+            # Find CASPT2 energy from detailed energies where reference energy matches root_data['energy']
+            caspt2_energy = None
+            for group_num, group_data in caspt2_detailed_energies.items():
+                if abs(group_data['reference_energy'] - root_data['energy']) < 1e-6:  # Small tolerance for floating point comparison
+                    caspt2_energy = group_data['total_energy']
+                    break
+            
+            # Find MS-CASPT2 energy by matching the current config with the highest occupation configurations
+            ms_caspt2_energy = None
+            ms_caspt2_highest_occupation = None
+            ms_caspt2_occupation_weight = None
+            ms_caspt2_occupation_coeff = None
+            
+            # Look through all MS-CASPT2 roots to find one where the highest occupation matches current config
+            for ms_root, ms_data in ms_caspt2_occupations.items():
+                if ms_data.get('highest_occupation') == config_data['config']:
+                    ms_caspt2_energy = ms_data.get('energy')
+                    ms_caspt2_highest_occupation = ms_data.get('highest_occupation')
+                    ms_caspt2_occupation_weight = ms_data.get('weight')
+                    ms_caspt2_occupation_coeff = ms_data.get('coefficient')
+                    break
+            
             data.append({
                 'Phi': phi,
                 'Psi': psi,
                 'Root': root,
                 'Energy': root_data['energy'],
-                'CASPT2_Energy': caspt2_energies['CASPT2'].get(root, None),
-                'MS_CASPT2_Energy': caspt2_energies['MS-CASPT2'].get(root, None),
+                'CASPT2_Energy': caspt2_energy,
+                'MS_CASPT2_Energy': ms_caspt2_energy,
+                'MS_CASPT2_Highest_Occupation': ms_caspt2_highest_occupation,
+                'MS_CASPT2_Occupation_Weight': ms_caspt2_occupation_weight,
+                'MS_CASPT2_Occupation_Coeff': ms_caspt2_occupation_coeff,
                 'Config': config_data['config'],
                 'Coeff': config_data['coeff'],
                 'Weight': config_data['weight'],
@@ -542,6 +666,41 @@ def filter_big_weights(df: pd.DataFrame) -> pd.DataFrame:
     Filter out configurations with weights greater than 0.05.
     """
     return df[df['Weight'] > 0.30]
+
+
+def test_ms_caspt2_extraction():
+    """
+    Test function to demonstrate MS-CASPT2 occupation extraction.
+    """
+    # Test with a real log file
+    import os
+    
+    # Look for a log file in the log_files directory
+    log_dir = "log_files"
+    if os.path.exists(log_dir):
+        log_files = [f for f in os.listdir(log_dir) if f.endswith('.log')]
+        if log_files:
+            test_file = os.path.join(log_dir, log_files[0])
+            print(f"Testing with file: {os.path.basename(test_file)}")
+            
+            with open(test_file, 'r') as f:
+                content = f.read()
+            
+            result = extract_ms_caspt2_with_occupations(content, energy_unit='ev')
+            
+            print("MS-CASPT2 Extraction Test Results:")
+            print("=" * 50)
+            for root_num, data in result.items():
+                print(f"Root {root_num}:")
+                print(f"  Energy: {data['energy']:.6f} eV")
+                print(f"  Highest Occupation: {data['highest_occupation']}")
+                print(f"  Weight: {data['weight']:.6f}")
+                print(f"  Coefficient: {data['coefficient']:.6f}")
+                print()
+        else:
+            print("No log files found in log_files directory")
+    else:
+        print("log_files directory not found")
 
 
 def main():
