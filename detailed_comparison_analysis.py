@@ -129,17 +129,17 @@ def analyze_geometry_differences(csv_file, phi, psi, geometry_name):
     return geometry_data
 
 def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
-    """Display a table of absolute energies (CASPT2 and MS-CASPT2) for ground and excited states for a given geometry, with high precision, all in eV. Includes ground state and transition name."""
+    """Display a table of absolute energies (CASPT2 and MS-CASPT2) for ground and excited states for a given geometry, with high precision, all in eV. Includes ground state, transition name, and root numbers."""
     df = pd.read_csv(csv_file)
     geometry_data = df[(df['phi'] == phi) & (df['psi'] == psi)].copy()
     if geometry_data.empty:
         print(f"No data found for geometry phi={phi}, psi={psi}")
         return None
-    print(f"\n{'='*110}")
+    print(f"\n{'='*130}")
     print(f"ABSOLUTE ENERGIES TABLE: {geometry_name} (φ={phi}°, ψ={psi}°)")
-    print(f"{'='*110}")
-    print(f"{'Start':<7} {'End':<7} {'Transition':<25} {'CASPT2 Energy (eV)':<25} {'MS-CASPT2 Energy (eV)':<28} {'Difference (eV)':<22}")
-    print("-" * 110)
+    print(f"{'='*130}")
+    print(f"{'Start':<7} {'End':<7} {'Transition':<25} {'CASPT2 Root':<12} {'MS-CASPT2 Root':<15} {'CASPT2 Energy (eV)':<25} {'MS-CASPT2 Energy (eV)':<28} {'Difference (eV)':<22}")
+    print("-" * 130)
     # Sort by start_state, end_state for clarity
     geometry_data = geometry_data.sort_values(by=['start_state', 'end_state'])
     # Find all unique states (including ground state)
@@ -153,6 +153,8 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
             start_state = row['start_state']
             end_state = row['end_state']
             transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else '(ground state)'
+            caspt2_root = row['caspt2_root'] if 'caspt2_root' in row and pd.notnull(row['caspt2_root']) else 'N/A'
+            ms_caspt2_root = row['ms_caspt2_root'] if 'ms_caspt2_root' in row and pd.notnull(row['ms_caspt2_root']) else 'N/A'
             caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
             ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
             diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
@@ -163,8 +165,9 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
                 if val == 0:
                     return f"{0:.10e}"
                 return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
-            print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
-            print(f"{'':<7} {'':<7} {'(Hartree)':<25} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
+            print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {caspt2_root:<12} {ms_caspt2_root:<15} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
+            print(f"{'':<7} {'':<7} {'':<25} {'':<12} {'':<15} {'(Hartree)':<25} {'(Hartree)':<28} {'(Hartree)':<22}")
+            print(f"{'':<7} {'':<7} {'':<25} {'':<12} {'':<15} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
     # Now print all other transitions (where start_state != end_state)
     for _, row in geometry_data.iterrows():
         if row['start_state'] == row['end_state']:
@@ -172,6 +175,8 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
         start_state = row['start_state']
         end_state = row['end_state']
         transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else ''
+        caspt2_root = row['caspt2_root'] if 'caspt2_root' in row and pd.notnull(row['caspt2_root']) else 'N/A'
+        ms_caspt2_root = row['ms_caspt2_root'] if 'ms_caspt2_root' in row and pd.notnull(row['ms_caspt2_root']) else 'N/A'
         caspt2_abs_ev = row['caspt2_energy'] * 27.211407953
         ms_caspt2_abs_ev = row['ms_caspt2_energy'] * 27.211407953
         diff_abs_ev = ms_caspt2_abs_ev - caspt2_abs_ev
@@ -182,8 +187,9 @@ def display_absolute_energies_table(csv_file, phi, psi, geometry_name):
             if val == 0:
                 return f"{0:.10e}"
             return f"{val:.10e}" if abs(val) < 1e-4 or abs(val) > 1e+6 else f"{val:.10g}"
-        print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
-        print(f"{'':<7} {'':<7} {'(Hartree)':<25} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
+        print(f"{int(start_state):<7} {int(end_state):<7} {transition:<25} {caspt2_root:<12} {ms_caspt2_root:<15} {sig_str(caspt2_abs_ev):<25} {sig_str(ms_caspt2_abs_ev):<28} {sig_str(diff_abs_ev):<22}")
+        print(f"{'':<7} {'':<7} {'':<25} {'':<12} {'':<15} {'(Hartree)':<25} {'(Hartree)':<28} {'(Hartree)':<22}")
+        print(f"{'':<7} {'':<7} {'':<25} {'':<12} {'':<15} {sig_str(caspt2_abs_h):<25} {sig_str(ms_caspt2_abs_h):<28} {sig_str(diff_abs_h):<22}")
     print("\n")
 
 def pretty_print_geometry_table(csv_file, phi, psi, geometry_name):
@@ -207,6 +213,8 @@ def pretty_print_geometry_table(csv_file, phi, psi, geometry_name):
         start_state = int(row['start_state'])
         end_state = int(row['end_state'])
         transition = row['transition'] if 'transition' in row and pd.notnull(row['transition']) else ''
+        caspt2_root = row['caspt2_root'] if 'caspt2_root' in row and pd.notnull(row['caspt2_root']) else 'N/A'
+        ms_caspt2_root = row['ms_caspt2_root'] if 'ms_caspt2_root' in row and pd.notnull(row['ms_caspt2_root']) else 'N/A'
         caspt2_ev = row['caspt2_energy'] * 27.211407953
         ms_caspt2_ev = row['ms_caspt2_energy'] * 27.211407953
         diff_ev = ms_caspt2_ev - caspt2_ev
@@ -217,13 +225,13 @@ def pretty_print_geometry_table(csv_file, phi, psi, geometry_name):
         coeff = f"{row['coeff']:.3f}" if 'coeff' in row and pd.notnull(row['coeff']) else ''
         weight = f"{row['weight']:.3f}" if 'weight' in row and pd.notnull(row['weight']) else ''
         table.append([
-            start_state, end_state, transition,
+            start_state, end_state, transition, caspt2_root, ms_caspt2_root,
             f"{caspt2_ev:.6f}", f"{ms_caspt2_ev:.6f}", f"{diff_ev:+.6f}",
             f"{caspt2_h:.8f}", f"{ms_caspt2_h:.8f}", f"{diff_h:+.8f}",
             config, coeff, weight
         ])
     headers = [
-        "Start", "End", "Transition",
+        "Start", "End", "Transition", "CASPT2 Root", "MS-CASPT2 Root",
         "CASPT2 (eV)", "MS-CASPT2 (eV)", "Δ (eV)",
         "CASPT2 (Ha)", "MS-CASPT2 (Ha)", "Δ (Ha)",
         "Configuration", "Coeff", "Weight"
@@ -337,13 +345,16 @@ def create_comparison_summary(geometry1=None, geometry2=None):
 if __name__ == "__main__":    
     # Example usage with custom geometries
     geometry1 = (225, 120, "Beta-Strand")
-    # geometry1 = (300, 300, "Alpha-Helix")
+    # geometry2 = (240, 30, "Alpha-Helix")
+    geometry1 = (300, 300, "Alpha-Helix")
 
     # Display absolute energies tables for both geometries
     display_absolute_energies_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
     # display_absolute_energies_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
 
     pretty_print_geometry_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])
+    # pretty_print_geometry_table('merged_results.csv', geometry2[0], geometry2[1], geometry2[2])
+    
     # create_comparison_summary(
     #     geometry1=geometry1,
     #     geometry2=geometry2

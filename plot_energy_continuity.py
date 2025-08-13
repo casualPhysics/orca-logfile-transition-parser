@@ -117,7 +117,8 @@ def create_3d_plot(df, transition_type, value_column='totald_debyes', output_fol
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"3D plot saved as: {filename}")
     
-    plt.close(fig)
+    # Show the plot instead of closing it
+    plt.show()
     
     return fig, ax
 
@@ -161,7 +162,8 @@ def create_heatmap_plot(df, transition_type, value_column='totald_debyes', outpu
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Heatmap saved as: {filename}")
     
-    plt.close(fig)
+    # Show the plot instead of closing it
+    plt.show()
 
 def create_distribution_plots(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True):
     """Create distribution plots (histogram and box plot) for a specific transition type"""
@@ -218,7 +220,8 @@ def create_distribution_plots(df, transition_type, value_column='totald_debyes',
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Distribution plots saved as: {filename}")
     
-    plt.close(fig)
+    # Show the plot instead of closing it
+    plt.show()
     
     return fig, (ax1, ax2)
 
@@ -263,7 +266,8 @@ def create_scatter_plot(df, transition_type, value_column='totald_debyes', outpu
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         print(f"Scatter plot saved as: {filename}")
     
-    plt.close(fig)
+    # Show the plot instead of closing it
+    plt.show()
     
     return fig, ax
 
@@ -308,7 +312,10 @@ def main(value_column='totald_debyes', output_folder='output_plots'):
     # Load data
     df, transitions = load_and_prepare_data('merged_results.csv', value_column=value_column)
     
-    print(f"\nFound {len(transitions)} transition types:")
+    # Filter out GROUND transition
+    transitions = [t for t in transitions if t != 'GROUND']
+    
+    print(f"\nFound {len(transitions)} transition types (excluding GROUND):")
     for i, transition in enumerate(transitions, 1):
         print(f"{i}. {transition}")
     

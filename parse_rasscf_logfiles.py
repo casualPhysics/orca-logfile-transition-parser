@@ -589,6 +589,7 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
             ms_caspt2_highest_occupation = None
             ms_caspt2_occupation_weight = None
             ms_caspt2_occupation_coeff = None
+            ms_caspt2_root = None
             
             # Look through all MS-CASPT2 roots to find one where the highest occupation matches current config
             for ms_root, ms_data in ms_caspt2_occupations.items():
@@ -597,6 +598,7 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
                     ms_caspt2_highest_occupation = ms_data.get('highest_occupation')
                     ms_caspt2_occupation_weight = ms_data.get('weight')
                     ms_caspt2_occupation_coeff = ms_data.get('coefficient')
+                    ms_caspt2_root = ms_root
                     break
             
             data.append({
@@ -605,7 +607,9 @@ def process_single_log_file(filepath: str) -> pd.DataFrame:
                 'Root': root,
                 'Energy': root_data['energy'],
                 'CASPT2_Energy': caspt2_energy,
+                'CASPT2_Root': group_num if caspt2_energy is not None else None,
                 'MS_CASPT2_Energy': ms_caspt2_energy,
+                'MS_CASPT2_Root': ms_caspt2_root,
                 'MS_CASPT2_Highest_Occupation': ms_caspt2_highest_occupation,
                 'MS_CASPT2_Occupation_Weight': ms_caspt2_occupation_weight,
                 'MS_CASPT2_Occupation_Coeff': ms_caspt2_occupation_coeff,
