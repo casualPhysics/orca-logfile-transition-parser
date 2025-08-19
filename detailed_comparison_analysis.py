@@ -347,6 +347,7 @@ if __name__ == "__main__":
     geometry1 = (225, 120, "Beta-Strand")
     # geometry2 = (240, 30, "Alpha-Helix")
     geometry1 = (300, 300, "Alpha-Helix")
+    geometry1 = (225, 165, "Beta-Strand")
 
     # Display absolute energies tables for both geometries
     display_absolute_energies_table('merged_results.csv', geometry1[0], geometry1[1], geometry1[2])

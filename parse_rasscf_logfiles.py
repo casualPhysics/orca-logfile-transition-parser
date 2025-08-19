@@ -723,7 +723,7 @@ def main():
         if filename.endswith(".log"):
             filepath = os.path.join(log_dir, filename)
             try:
-                df = process_single_log_file(filepath)
+                df =  process_single_log_file(filepath)
                 results.append(df)
             except (FileNotFoundError, ValueError) as e:
                 print(f"Error processing {filename}: {str(e)}")
