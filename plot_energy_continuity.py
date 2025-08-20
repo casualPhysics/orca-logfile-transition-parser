@@ -262,10 +262,6 @@ def create_3d_plot(df, transition_type, value_column='totald_debyes', output_fol
     ax.set_xlim(-180, 180)
     ax.set_ylim(-180, 180)
     
-    # Set z-axis limits for totald_debyes plots
-    if value_column == 'totald_debyes':
-        ax.set_zlim(0, 5)
-    
     # Add grid
     ax.grid(True, alpha=0.3)
     
@@ -286,6 +282,48 @@ def create_3d_plot(df, transition_type, value_column='totald_debyes', output_fol
     
     return fig, ax
 
+
+def filter_out_erroneous_geometries(df):
+    df = df.copy() 
+    # remove high dipole and energy difference from above 
+    high_dipole_geometries = df[
+        (df['transition'].isin(['n_to_pi_*_R', 'n_to_pi_*_L'])) & 
+        ((df['totald_debyes'] > 1) | (df['energy_difference_eV'] > 8))
+    ]['geometry'].unique()
+
+    # remove low energy dipoles
+    low_energy_geometries = df[
+        (df['transition'].isin(['pi_nb_to_pi_*_R'])) & 
+        (df['energy_difference_eV'] < 3)
+    ]['geometry'].unique()
+
+    low_energy_n_pi_star_R_geometries = df[
+        (df['transition'].isin(['n_to_pi_*_R'])) & 
+        (df['energy_difference_eV'] < 4.5)
+    ]['geometry'].unique()
+
+    excluded_set = list(set(list(high_dipole_geometries) + list(low_energy_geometries) + list(low_energy_n_pi_star_R_geometries)))
+    
+    # Filter out these geometries from the current transition data
+    if len(excluded_set) > 0:
+        df = df[~df['geometry'].isin(excluded_set)]
+        print(f"Filtered out {len(excluded_set)} geometries with dipole > 1")
+        return df 
+    
+    return 
+
+
+def categorize_geometries(df):
+    df = df.copy()
+    conformation_colors = []
+    conformation_name = []
+    for _, row in df.iterrows():
+        conf_type = classify_conformation(row['phi_transformed'], row['psi_transformed'])
+        conformation_name.append(conf_type)
+    df['conformation'] = conformation_name
+    return df 
+
+
 def create_combined_3d_plots(df, value_column, transitions, output_folder='output_plots', 
                             save_plot=True, filter_spatial_outliers=False, outlier_threshold_percentile=95):
     """Create combined 3D plots with all transitions on one page for a specific value column"""
@@ -299,32 +337,12 @@ def create_combined_3d_plots(df, value_column, transitions, output_folder='outpu
     df = df.copy()
     df = transform_phi_psi_coordinates(df)
     df['geometry'] = df['phi_transformed'].astype(str) + '_' + df['psi_transformed'].astype(str)
+    df = categorize_geometries(df)
+    df = df.loc[df['conformation'] != 'other']
 
     if filter_spatial_outliers:
-        # remove high dipole and energy difference from above 
-        high_dipole_geometries = df[
-            (df['transition'].isin(['n_to_pi_*_R', 'n_to_pi_*_L'])) & 
-            ((df['totald_debyes'] > 1) | (df['energy_difference_eV'] > 8))
-        ]['geometry'].unique()
+        df = filter_out_erroneous_geometries(df)
 
-        # remove low energy dipoles
-        low_energy_geometries = df[
-            (df['transition'].isin(['pi_nb_to_pi_*_R'])) & 
-            (df['energy_difference_eV'] < 3)
-        ]['geometry'].unique()
-
-        low_energy_n_pi_star_R_geometries = df[
-            (df['transition'].isin(['n_to_pi_*_R'])) & 
-            (df['energy_difference_eV'] < 4.5)
-        ]['geometry'].unique()
-
-        excluded_set = list(set(list(high_dipole_geometries) + list(low_energy_geometries) + list(low_energy_n_pi_star_R_geometries)))
-        
-        # Filter out these geometries from the current transition data
-        if len(excluded_set) > 0:
-            df = df[~df['geometry'].isin(excluded_set)]
-            print(f"Filtered out {len(excluded_set)} geometries with dipole > 1")
-    
     for i, transition_type in enumerate(transitions):
         # Filter data for the specific transition
         transition_data = df[df['transition'] == transition_type].copy()
@@ -356,7 +374,7 @@ def create_combined_3d_plots(df, value_column, transitions, output_folder='outpu
         
         # Plot the surface
         surf = ax.plot_surface(phi_mesh, psi_mesh, value_matrix, 
-                              cmap='viridis', alpha=0.8, linewidth=0, antialiased=True)
+                              cmap='viridis', alpha=0.8, linewidth=0, antialiased=False)
         
         # Classify conformations and color-code the scatter points
         conformation_colors = []
@@ -401,11 +419,7 @@ def create_combined_3d_plots(df, value_column, transitions, output_folder='outpu
         # Set axis limits
         ax.set_xlim(-180, 180)
         ax.set_ylim(-180, 180)
-        
-        # Set z-axis limits for totald_debyes plots
-        if value_column == 'totald_debyes':
-            ax.set_zlim(0, 5)
-        
+
         # Add grid
         ax.grid(True, alpha=0.3)
     
@@ -840,9 +854,266 @@ def analyze_transition_for_all_columns(df, transition_type, value_columns, outpu
             create_scatter_plot(df, transition_type, value_column=value_column, output_folder=output_folder, 
                               save_plot=True, filter_spatial_outliers=True)
         
+        # Create heatmap scatter plot
+        print(f"Creating heatmap scatter plot for {value_column}...")
+        create_heatmap_scatter_plot(df, transition_type, value_column=value_column, output_folder=output_folder, save_plot=True)
+        
+        # Create filtered heatmap scatter plot for energy difference plots
+        if value_column:
+            print(f"Creating filtered heatmap scatter plot for {value_column} (spatial outliers removed)...")
+            create_heatmap_scatter_plot(df, transition_type, value_column=value_column, output_folder=output_folder, 
+                                      save_plot=True, filter_spatial_outliers=True)
+        
         print(f"Completed analysis for {value_column}")
     
     print(f"\nCompleted all analyses for transition: {transition_type}")
+
+def create_heatmap_scatter_plot(df, transition_type, value_column='totald_debyes', output_folder='output_plots', save_plot=True, filter_spatial_outliers=False):
+    """Create a heatmap scatter plot for a specific transition type"""
+    
+    # Filter data for the specific transition
+    transition_data = df[df['transition'] == transition_type].copy()
+    
+    if len(transition_data) == 0:
+        print(f"No data found for transition: {transition_type}")
+        return
+    
+    # Transform coordinates to [-180, 180] range
+    transition_data = transform_phi_psi_coordinates(transition_data)
+    
+    # Filter out spatial outliers if requested
+    if filter_spatial_outliers:
+        # Filter out geometries where totald_debyes > 1 for n->pi* L or n->pi* R transitions
+        if transition_type in ['n->pi* L', 'n->pi* R']:
+            # Get geometries to exclude (where dipole > 1)
+            high_dipole_geometries = df[
+                (df['transition'] == transition_type) & 
+                (df['totald_debyes'] > 1)
+            ]['geometry'].unique()
+            
+            # Filter out these geometries from the current transition data
+            if len(high_dipole_geometries) > 0:
+                transition_data = transition_data[~transition_data['geometry'].isin(high_dipole_geometries)]
+                print(f"Filtered out {len(high_dipole_geometries)} geometries with dipole > 1 for {transition_type}")
+    
+    # Create the plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    # Create scatter plot with color mapping
+    scatter = ax.scatter(transition_data['phi_transformed'], 
+                        transition_data['psi_transformed'], 
+                        c=transition_data[value_column], 
+                        cmap='viridis', 
+                        s=60, 
+                        alpha=0.8)
+    
+    # Add colorbar
+    cbar = plt.colorbar(scatter, ax=ax)
+    
+    # Format the colorbar label based on the value column
+    if value_column == 'totald_debyes':
+        cbar_label = 'Total Dipole Moment (Debyes)'
+    elif value_column == 'caspt2_energy_difference_ev':
+        cbar_label = 'CASPT2 Energy Difference (eV)'
+    elif value_column == 'ms_caspt2_energy_difference_ev':
+        cbar_label = 'MS-CASPT2 Energy Difference (eV)'
+    elif value_column == 'energy_difference_eV':
+        cbar_label = 'Energy Difference (eV)'
+    else:
+        cbar_label = value_column
+    
+    cbar.set_label(cbar_label, fontsize=12)
+    
+    # Set axis limits
+    ax.set_xlim(-180, 180)
+    ax.set_ylim(-180, 180)
+    
+    # Add grid
+    ax.grid(True, alpha=0.3)
+    
+    # Add conformation regions
+    add_conformation_regions(ax)
+    
+    # Format the title based on the value column
+    if value_column == 'totald_debyes':
+        title = f'Total Dipole Moment (Debyes) Heatmap Scatter: {transition_type}'
+    elif value_column == 'caspt2_energy_difference_ev':
+        title = f'CASPT2 Energy Difference (eV) Heatmap Scatter: {transition_type}'
+    elif value_column == 'ms_caspt2_energy_difference_ev':
+        title = f'MS-CASPT2 Energy Difference (eV) Heatmap Scatter: {transition_type}'
+    elif value_column == 'energy_difference_eV':
+        title = f'Energy Difference (eV) Heatmap Scatter: {transition_type}'
+    else:
+        title = f'{value_column} Heatmap Scatter: {transition_type}'
+    
+    # Add outlier filtering info to title if applicable
+    if filter_spatial_outliers:
+        title += ' (Spatial Outliers Filtered)'
+    
+    plt.title(title, fontsize=14, fontweight='bold')
+    plt.xlabel('Phi (degrees)', fontsize=12)
+    plt.ylabel('Psi (degrees)', fontsize=12)
+    
+    plt.tight_layout()
+    
+    if save_plot:
+        # Include outlier filtering info in filename if applicable
+        filename_suffix = ""
+        if filter_spatial_outliers:
+            filename_suffix = "_outliers_filtered"
+        
+        filename = os.path.join(output_folder, f"{value_column}_heatmap_scatter_{transition_type.replace('*', 'star').replace(' ', '_')}{filename_suffix}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Heatmap scatter plot saved as: {filename}")
+    
+    # Close the figure
+    plt.close(fig)
+    
+    return fig
+
+def add_conformation_regions(ax):
+    """Add protein conformation regions to the plot"""
+    # Beta-sheet regions
+    ax.axhspan(90, 180, xmin=0.25, xmax=0.42, alpha=0.2, color='blue', label='Beta-sheet')
+    
+    # Helix regions
+    ax.axhspan(-90, 0, xmin=0.25, xmax=0.42, alpha=0.2, color='red', label='Helix')
+    
+    # Alpha-helix regions
+    ax.axhspan(-45, 30, xmin=0.33, xmax=0.5, alpha=0.2, color='darkred', label='Alpha-helix')
+    
+    # Left-handed helix regions
+    ax.axhspan(0, 60, xmin=0.625, xmax=0.71, alpha=0.2, color='orange', label='Left-handed helix')
+    
+    # Polyproline II regions
+    ax.axhspan(115, 175, xmin=0.25, xmax=0.42, alpha=0.2, color='purple', label='Polyproline II')
+
+def create_combined_heatmap_scatter_plots(df, value_column, transitions, output_folder='output_plots', save_plot=True, filter_spatial_outliers=False):
+    """Create combined heatmap scatter plots for all transitions on one page"""
+    
+    # Transform coordinates
+    df_transformed = transform_phi_psi_coordinates(df)
+    
+    # Create figure with subplots
+    n_transitions = len(transitions)
+    n_cols = 2
+    n_rows = (n_transitions + 1) // 2  # Ceiling division
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(16, 8 * n_rows))
+    
+    # Flatten axes array for easier indexing
+    if n_rows == 1:
+        axes = [axes] if n_cols == 1 else axes
+    else:
+        axes = axes.flatten()
+    
+    # Create a single colorbar for all subplots
+    vmin = float('inf')
+    vmax = float('-inf')
+    
+    # filter out 
+    df_transformed['geometry'] = df_transformed['phi_transformed'].astype(str) + '_' + df_transformed['psi_transformed'].astype(str)
+
+    if filter_spatial_outliers:
+        df_transformed = filter_out_erroneous_geometries(df_transformed)
+
+    # First pass: find global min/max values
+    for transition in transitions:
+        transition_data = df_transformed[df_transformed['transition'] == transition].copy()        
+        if len(transition_data) > 0:
+            vmin = min(vmin, transition_data[value_column].min())
+            vmax = max(vmax, transition_data[value_column].max())
+    
+    # Second pass: create the plots
+    for i, transition in enumerate(transitions):
+        if i >= len(axes):
+            break
+            
+        ax = axes[i]
+        transition_data = df_transformed[df_transformed['transition'] == transition].copy()
+
+        if len(transition_data) == 0:
+            ax.text(0.5, 0.5, f'No data for {transition}', ha='center', va='center', transform=ax.transAxes)
+            ax.set_title(f'{transition}', fontsize=12, fontweight='bold')
+            continue
+        
+        # Create scatter plot with color mapping
+        scatter = ax.scatter(transition_data['phi_transformed'], 
+                           transition_data['psi_transformed'], 
+                           c=transition_data[value_column], 
+                           cmap='viridis', 
+                           s=50, 
+                           alpha=0.8,
+                           vmin=vmin, 
+                           vmax=vmax)
+        
+        # Set axis limits
+        ax.set_xlim(-180, 180)
+        ax.set_ylim(-180, 180)
+        
+        # Add grid
+        ax.grid(True, alpha=0.3)
+        
+        # Set title
+        ax.set_title(f'{transition}', fontsize=12, fontweight='bold')
+        
+        # Set labels
+        ax.set_xlabel('Phi (degrees)', fontsize=10)
+        ax.set_ylabel('Psi (degrees)', fontsize=10)
+    
+    # Hide unused subplots
+    for i in range(len(transitions), len(axes)):
+        axes[i].set_visible(False)
+    
+    # Add colorbar
+    cbar = fig.colorbar(scatter, ax=axes, shrink=0.8, aspect=30)
+    
+    # Format the colorbar label based on the value column
+    if value_column == 'totald_debyes':
+        cbar_label = 'Total Dipole Moment (Debyes)'
+    elif value_column == 'caspt2_energy_difference_ev':
+        cbar_label = 'CASPT2 Energy Difference (eV)'
+    elif value_column == 'ms_caspt2_energy_difference_ev':
+        cbar_label = 'MS-CASPT2 Energy Difference (eV)'
+    elif value_column == 'energy_difference_eV':
+        cbar_label = 'Energy Difference (eV)'
+    else:
+        cbar_label = value_column
+    
+    cbar.set_label(cbar_label, fontsize=12)
+    
+    # Add overall title
+    if value_column == 'totald_debyes':
+        overall_title = 'Total Dipole Moment (Debyes) Heatmap Scatter Plots - All Transitions'
+    elif value_column == 'caspt2_energy_difference_ev':
+        overall_title = 'CASPT2 Energy Difference (eV) Heatmap Scatter Plots - All Transitions'
+    elif value_column == 'ms_caspt2_energy_difference_ev':
+        overall_title = 'MS-CASPT2 Energy Difference (eV) Heatmap Scatter Plots - All Transitions'
+    elif value_column == 'energy_difference_eV':
+        overall_title = 'Energy Difference (eV) Heatmap Scatter Plots - All Transitions'
+    else:
+        overall_title = f'{value_column} Heatmap Scatter Plots - All Transitions'
+    
+    # Add outlier filtering info to title if applicable
+    if filter_spatial_outliers:
+        overall_title += ' (Spatial Outliers Filtered)'
+    
+    fig.suptitle(overall_title, fontsize=16, fontweight='bold')
+        
+    if save_plot:
+        # Include outlier filtering info in filename if applicable
+        filename_suffix = ""
+        if filter_spatial_outliers:
+            filename_suffix = "_outliers_filtered"
+        
+        filename = os.path.join(output_folder, f"{value_column}_combined_heatmap_scatter_all_transitions{filename_suffix}.png")
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        print(f"Combined heatmap scatter plot saved as: {filename}")
+    
+    # Close the figure
+    plt.close(fig)
+    
+    return fig
 
 def main(output_folder='output_plots'):
     """Main function to create all visualizations for all value columns"""
@@ -852,6 +1123,10 @@ def main(output_folder='output_plots'):
     
     # Create combined plots folder
     combined_plots_folder = create_output_folder(os.path.join(output_folder, 'combined_plots'))
+    
+    # Create subfolders for different plot types
+    scatter_plots_folder = create_output_folder(os.path.join(combined_plots_folder, 'scatter_plots'))
+    d3_plots_folder = create_output_folder(os.path.join(combined_plots_folder, '3d_plots'))
     
     # Load data
     df, transitions, value_columns = load_and_prepare_data('merged_results.csv')
@@ -872,16 +1147,28 @@ def main(output_folder='output_plots'):
     for value_column in value_columns:
         print(f"Creating combined 3D plot for {value_column}...")
         # Create unfiltered version
-        create_combined_3d_plots(df, value_column, transitions, output_folder=combined_plots_folder, save_plot=True)
+        create_combined_3d_plots(df, value_column, transitions, output_folder=d3_plots_folder, save_plot=True)
         
         # Create filtered version (without spatial outliers) for energy difference plots
         print(f"Creating filtered combined 3D plot for {value_column} (spatial outliers removed)...")
-        create_combined_3d_plots(df, value_column, transitions, output_folder=combined_plots_folder, 
+        create_combined_3d_plots(df, value_column, transitions, output_folder=d3_plots_folder, 
                                 save_plot=True, filter_spatial_outliers=True, outlier_threshold_percentile=95)
     
-    # Create individual plots for each transition and value column
-    for transition in transitions:
-        analyze_transition_for_all_columns(df, transition, value_columns, output_folder=output_folder)
+    # # Create individual plots for each transition and value column
+    # for transition in transitions:
+    #     analyze_transition_for_all_columns(df, transition, value_columns, output_folder=output_folder)
+    
+    # Create combined heatmap scatter plots for each value column
+    print(f"\nCreating combined heatmap scatter plots for each value column...")
+    for value_column in value_columns:
+        print(f"Creating combined heatmap scatter plot for {value_column}...")
+        # Create unfiltered version
+        create_combined_heatmap_scatter_plots(df, value_column, transitions, output_folder=scatter_plots_folder, save_plot=True)
+        
+        # Create filtered version (without spatial outliers) for energy difference plots
+        print(f"Creating filtered combined heatmap scatter plot for {value_column} (spatial outliers removed)...")
+        create_combined_heatmap_scatter_plots(df, value_column, transitions, output_folder=scatter_plots_folder, 
+                                            save_plot=True, filter_spatial_outliers=True)
     
 
 if __name__ == "__main__":
